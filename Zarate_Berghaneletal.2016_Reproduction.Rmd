@@ -1,0 +1,407 @@
+---
+title: "Stats Reproduction"
+author: "Mel Zarate"
+date: "12/16/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<img src = "https://upload.wikimedia.org/wikipedia/commons/e/e4/Assamese_macaque_AJTJ_P1020178.JPG">
+
+
+
+#Introduction: developmental restraint versus predictive adaptive resposes  
+
+Berghanel et al. (2016) wanted to understand the role of prenatal maternal stress on the development phenotype of offspring, as well as if food availabiliy (and therefore food intake) impacts stress on pregnant mothers. They propose two ways that maternal stress could effect offspring phenotypes: 
+
+1. **Developmental restraints hypothesis**: High prenatal stress due to lack of food availability will lead to offspring reducing their investment into development to reduce the chances of starvation. 
+
+2. **Predictive adaptive response (PARs)**: High prenatal stress due to lack of food availability will lead to accelerated growth in offspring in preparation for the likelihood of a reduced lifespan in adverse conditions.
+
+The authors wanted to test these hypotheses in natural conditions, so they did so in a group of Assamese macaques (*Macaca assamensis*) that have previously shown correlations between low food availability and low growth rates and reduced social play. The group inhabits the highly variable forest of Phu Khieo Wildlife Sanctuary in Thailand. 
+
+<img src = "http://www.planetstillalive.com/wp-content/uploads/2013/12/Assamese-Macaque-AR.jpg">
+
+#The data (and some brief methods)
+
+Maternal stress was measured through elevation of prenatal glucocorticoid levels (preGC) in fecal samples of the macaques. Behavioral data, such as offspring social play and variables describing maternal style, were collected via 30 minute focal observations at one minute intervals. Furthermore, monthly values for offspring size and growth rate were estimated with photogrammetry of the length of lower arm from birth to the end of the study. As for environmental conditions potentially inducing stress, food availabity was calculated using fruit abundance and tree density during months before, during and after the mother's gestation period. All variables, except for body size index, PreGC and PostGC, were z-transformed. I have separated the data relevant for each model into their own csv file, and each has been individually uploaded into the reposity along with the original excel file the data came in. 
+
+
+
+The authors predicted that maternal food availability is negatively correlated to PreGC levels. *However, they expect that this could also be associated with maternal rank and offspring sex, as these may impact how much food a female receives or needs, respectively.* The two alternative hypotheses that are tested reflect the PAR and developmental constraint (DC) hypotheses: 
+
+1. **DC**: High PreGC levels will lead to decreased postnatal growth rates.
+2. **PAR**: High PreGC levels will lead to increased postnatal growth rates. 
+
+Offspring phenotype, however, may be mediated by food availability, offspring sex, maternal care-taking, maternal stress during lactation, and energy uptake (food availability post-gestation) and use (offspring social play). Therefore, the authors *"controlled"* for these variables. 
+
+I will be *attempting* to recreate the first four models (three **generalized least-squares models** (GLS) and one **linear model**) of this study, as well as a **PCA** on maternal style. The authors *control* for certain variables by *adding* them into their models, and check the each models' residual distribution for normality. 
+
+<img src = "https://royalsocietypublishing.org/cms/attachment/fc8e2bdf-4b2f-46cb-be73-3c0f3d64e8a4/rspb20161304f01.jpg">
+
+
+**Figure 1** I will be reproducing models 1-4 and a PCA (not shown). "Causes and consequences of maternal physiological stress. Red, females; blue, males. Values in brackets: reduced model after exclusion of 6 the collinear control variable(s) (see text). Superscript 1 in the artwork denotes model residuals (partial regression plot). All fixed effects were z-transformed. Sex: male/female 1⁄4 0/1. (a) Prenatal food availability predicted gestational maternal GC level (PreGC) (model 1, GLS, response variable: PreGC (individual samples, log-transformed), grouping variable: mother ID; $ on the day the GC in the faecal sample were produced (‘present’) or during the three month leading up to the sampling day (‘before’). (b) Postnatal maternal GC level (PostGC) and rejectiveness, and by trend also protectiveness, were independently related to PreGC (model 2, LM, response variable: average PreGC during gestation). (c) PreGC during the first and second gestational trimester predicted postnatal growth rates (model 3, GLS, response variable: monthly body size index, grouping variable: infant ID; from birth until age of separate measurement). We report the main effect for age only because all other main effects do not inform the research question. Chart: the interaction between age and early-to-mid-gestational PreGC of the reduced model is plotted (i.e. the influence of PreGC on the estimate of age; shaded: 95% confidence interval; package: interplot [66]). (d) Body size at the age of 16–18 months was predicted by early-to-mid-gestational PreGC (model 4, GLS, response variable: body size indices at 16 – 18 months of age, grouping variable: infant ID; from birth until age of separate measurement)." (Berghanel et al. 2016).
+
+Let's do it... 
+
+##But first, the packages!
+
+Here are the packages that will be used in this analysis:
+
+* {curl}
+* {nlme}
+* {ggplot2}
+* {piecewiseSEM}
+* {car}
+* {pysch}
+
+#Model 1: PreGC and Food Availability 
+
+Here the authors test for their first hypothesis, that stress is induced by low food availability. To do this, they ran a GLS model with PreGC as the dependent variable and food availability as the independent variable.
+
+Get the data. For each data upload, I wil be using the curl package to get it from my GitHub Repo: 
+```{r}
+library(curl)
+f <- curl("https://raw.githubusercontent.com/MelZarate/mazarate-Berghanel2016-replication-assignment/master/model_1.csv")
+mod_1 <- read.csv(f, header = TRUE, sep = ",", stringsAsFactors = TRUE)
+head(mod_1)
+summary(mod_1)
+```
+
+The data here includes PreGC, gestatio day (in days after conception), prenatal food availability (FA) presently and before birth, maternal rank, offspring sex, year of birth, gestation day, time of day, and mother ID. All variables besides mother ID and preGC were z-transformed. 
+
+As I mentioned before, the authors checked the residuals of each model for normal distribution. However, I am going to start just by checking out the distribution of the dependent and independent variables for this model. 
+
+PreGC:
+```{r}
+hist(mod_1$PreGC,probability=TRUE, main="Histogram of normal
+data",xlab="Approximately normally distributed data")
+qqnorm(mod_1$PreGC,main="Normal QQ plot random normal variables (height)")
+qqline(mod_1$PreGC,col="gray")
+```
+
+
+Food Availabilty:
+```{r}
+hist(mod_1$nPrenatal.FA.before,probability=TRUE, main="Histogram of normal
+data",xlab="Approximately normally distributed data")
+qqnorm(mod_1$nPrenatal.FA.before,main="Normal QQ plot random normal variables (height)")
+qqline(mod_1$nPrenatal.FA.before,col="gray")
+```
+
+These both look pretty far from normal, so let's trying looking at the log-transformed variables. 
+
+```{r}
+hist(log(mod_1$PreGC),probability=TRUE, main="Histogram of normal
+data",xlab="Approximately normally distributed data")
+qqnorm(log(mod_1$PreGC),main="Normal QQ plot random normal variables (height)")
+qqline(log(mod_1$PreGC),col="gray")
+```
+
+That looks much better! 
+
+
+```{r}
+hist(log(mod_1$nPrenatal.FA.before),probability=TRUE, main="Histogram of normal
+data",xlab="Approximately normally distributed data")
+qqnorm(log(mod_1$nPrenatal.FA.before),main="Normal QQ plot random normal variables (height)")
+qqline(log(mod_1$nPrenatal.FA.before),col="gray")
+```
+
+So this doesn't look great, but the authors still used it so I'm going to roll with it. I will continue to check if the residuals of the model are normally distributed as I go on. 
+
+Build the model: 
+
+The authors use a generalized least-squares model to look at the relationship between PreGC and Food availability.
+```{r}
+library(nlme) #this has the gls function 
+m1 <- gls(PreGC ~ nPrenatal.FA.before, data = mod_1) #first looking at the variables before they are log-transformed 
+plot(m1) 
+summary(m1)
+```
+
+Let's check the residuals for normal distributions, as the authors say that they did: 
+
+```{r}
+hist(residuals(m1))
+qqnorm(residuals(m1),main="Normal QQ plot random normal variables (height)")
+qqline(residuals(m1),col="gray")
+```
+
+Doesn't look very normally distributed, so that must be why they used the log-transformed version of the PreGC variable: 
+
+```{r}
+m1.log <- gls(log(PreGC) ~ nPrenatal.FA.before, data = mod_1)
+plot(m1.log)
+summary(m1.log)
+
+#check the residuals:
+hist(residuals(m1.log))
+qqnorm(residuals(m1.log),main="Normal QQ plot random normal variables (height)")
+qqline(residuals(m1.log),col="gray")
+```
+
+Distribution looks great! The explanatory value for food availability resulting from the GLS is a bit off (-.2 compared to the -.16 that the authors found).
+
+However, the authors say that they *controlled* for maternal rank, offspring sex, year of birth, time and day of gestation, and yet they have estimated values and statistics for each variable, which means that they were included in the model. The dialogue is a bit confusing, because they must have included them in the model to get these values, yet they even say in the figure caption "reduced model after *exclusion* of the collinear control variables."
+
+Since they would have to be included to have the estimates in the output, I will include them in the model: 
+```{r}
+m1.log.controlled <- gls(log(PreGC) ~ nPrenatal.FA.before + Maternal.rank + Sex.of.the.offspring + Year.of.birth + Gestation.day.1 + Day.time, data = mod_1) #including the other variables in the model
+plot(m1.log.controlled)
+summary(m1.log.controlled)
+
+#Check the residuals, just for the sake of consistency: 
+hist(residuals(m1.log.controlled))
+qqnorm(residuals(m1.log.controlled),main="Normal QQ plot random normal variables (height)")
+qqline(residuals(m1.log.controlled),col="gray")
+```
+
+Now all values are very close to what the authors show, and the residuals are normally distributed. But I'm still not too sure why they would include these into the model. I am going to try to actually control for these extra variables by regressing them out of the model. Here I am controlling for maternal rank by regressing it out of our dependent variable. When you do this, you regress the variable you want to control for against your variable of interest, and use the residuals as your new variable of interest: 
+
+```{r}
+#First I will regress out maternal rank of our dependent variable by modelling them against each other and assigning the residuals of that model to an object within the original data. 
+mod_1$PreGC_ctrl1<-resid(gls(PreGC~Maternal.rank, data=mod_1)) 
+mod_1$PreGC_ctrl2<-resid(gls(PreGC_ctrl1~Sex.of.the.offspring,data=mod_1)) #now do this until I have regressed out each control variable. 
+hist(mod_1$PreGC_ctrl2) #looks fine so far
+mod_1$PreGC_ctrl3<-resid(gls(PreGC_ctrl2~Year.of.birth,data=mod_1))
+mod_1$PreGC_ctrl4<-resid(gls(PreGC_ctrl3~Gestation.day.1,data=mod_1))
+mod_1$PreGC_ctrl5<-resid(gls(PreGC_ctrl4~Day.time,data=mod_1))
+```
+
+So now the PreGC variable that has all of the variables controlled for is PreGC_ctrl5. Let's see what different this has in the model against food availability: 
+
+```{r}
+m1.cntrl <- gls(PreGC_ctrl5 ~ nPrenatal.FA.before, data = mod_1) 
+plot(m1.cntrl)
+summary(m1.cntrl)
+```
+
+So the plot doesn't look quite as nice as before, and the values now are *way* off and insignificant. However, remember that they used the log transformed PreGC variable, and I didn't here so that's probably why that happened. For some reason, the gls() function is picky about which variables are log-transformed, and it didn't want to run when I transformed the PreGC controlled for all of the other variables. 
+
+
+Now that I have those values, I am going to recreate the plot that they made showing the correlation between PreGC and food availability, with mother ID as a grouping variable. 
+
+```{r}
+library(ggplot2)
+ggplot(data=mod_1,aes(y=log(PreGC),x=nPrenatal.FA.before))+geom_point(data=mod_1,shape=21,aes(fill=Mother.ID))+stat_smooth(method="lm")+theme_bw()
+```
+
+I am also going to check the R-squared value using the piecewiseSEM package, as the authors did. 
+
+```{r}
+library(piecewiseSEM)
+rsquared(m1.log.controlled) #finding it for the model including other variables
+```
+
+Looks like my R squared is just a *little* higher than the authors', but pretty close! This is showing that PreGC is negatively correlated with prenatal food availability. We can infer from this that food shortages that result in reduced maternal physiological condition are associated with physiological stress. 
+
+#Model 2 
+
+##PreGC and postnatal maternal attributes
+
+Here, the authors wanted to analyze correlations between stress during gestation (PreGC) and postnatal maternal caretaking (maternal protectiveness and rejectiveness) and stress (PostGC). 
+
+Get the data: 
+```{r}
+f <- curl("https://raw.githubusercontent.com/MelZarate/mazarate-Berghanel2016-replication-assignment/master/model_2.csv")
+mod_2 <- read.csv(f, header = TRUE, sep = ",", stringsAsFactors = TRUE)
+head(mod_2)
+summary(mod_2)
+```
+
+The data here incldues PreGC, maternal protectiveness and rejectiveness, PostGC, postnatal FA and offspring sex. They tested for these correlations by running a simple linear model including these variables, so I'll start with just that: 
+
+```{r}
+m2 <- lm(data = mod_2, PreGC ~ Maternal_protectiveness + Maternal_rejectiveness + PostGC)
+plot(m2)
+summary(m2)
+hist(residuals(m2)) #plot the residuals
+qqnorm(residuals(m2),main="Normal QQ plot random normal variables (height)")
+qqline(residuals(m2),col="gray")
+```
+
+Well that looks messy. It is interesting because the authors did not mention taking the log-transformation of any variable, even though they did for PreGC in the last model, and, as we saw earlier, the log(PreGC) has a normal distribution. I'm just going to try it out of curiosity. 
+
+```{r}
+library(car) #this time I am going to use the qqPlot function to look at the residuals. 
+m2.log <- lm(data = mod_2, log(PreGC) ~ Maternal_protectiveness + Maternal_rejectiveness + PostGC)
+plot(m2.log)
+summary(m2.log)
+hist(residuals(m2.log)) #plot the residuals
+qqPlot(m2.log$residuals)
+```
+The plots here are still pretty messy. I'm going to go on with what the authors did without the log-transformation. Again, they say that they controlled for certain variables in this analysis: postnatal food availability and sex of the offspring. This makes sense, because we wouldn't want offspring sex and the amount of food available to have an impact on the correlation between stress that the mother endures before and after birth. However, estimates are also given for these two variables, meaning that they must have actually been included in the model. 
+
+Here's what that would look like: 
+```{r}
+m2.cntrl <- lm(data = mod_2, PreGC ~ Maternal_protectiveness + Maternal_rejectiveness + 
+    PostGC + Postnatal_FA + Sex_of_offspring)
+plot(m2.cntrl)
+summary(m2.cntrl)
+hist(residuals(m2.cntrl)) #plot the residuals
+qqPlot(m2.cntrl$residuals)
+```
+In terms of the model plot and distribution of the residuals, this looks a lot better (keeping in mind the relatively low sample size of 17 here). Also the estimates and R squared value are spot on to what the authors found.  
+
+
+Going forward, the they did not give any plots to what the correlation between these variables, but if they would look like: 
+
+```{r}
+ggplot(data=mod_2,aes(y=PreGC,x=PostGC))+geom_point(data=mod_2,shape=21)+stat_smooth(method="lm")+theme_bw() #postGC
+ggplot(data=mod_2,aes(y=PreGC,x=Maternal_protectiveness))+geom_point(data=mod_2,shape=21)+stat_smooth(method="lm")+theme_bw() #maternal protectiveness after giving birth 
+ggplot(data=mod_2,aes(y=PreGC,x=Maternal_rejectiveness))+geom_point(data=mod_2,shape=21)+stat_smooth(method="lm")+theme_bw() #maternal rejectiveness after giving birth 
+```
+
+I can see why they didn't give them- there seems to be a wide range of confidence with some points outside. Again, this may be due to the small sample size. It does, however, show that PreGC is positively correlated to maternal rejectiveness and PostGC. What the authors fail to discus is the *slight* positive correlation between PreGC and protectiveness. 
+
+#Model 3
+
+##PreGC-effetcs on postnatal offspring growth rate
+
+This time, the authors attempt to quantify how offspring body size can be predicted by average PreGC during gestation and age at measurement, controlling for the interactions between age and the control variables. 
+
+Get the data: 
+```{r}
+f <- curl("https://raw.githubusercontent.com/MelZarate/mazarate-Berghanel2016-replication-assignment/master/model_3.csv")
+mod_3 <- read.csv(f, header = TRUE, sep = ",", stringsAsFactors = TRUE)
+head(mod_3)
+summary(mod_3)
+```
+
+This data includes every variable that has been used thus far, along with infant ID, birth year, percent of time playing socially, FA throughout gestation, early-mid gestation FA, PreGC at different points of gestation (early, mid, late), body size index and age (in days and z-transformed; I will use z-transformed). 
+
+
+Build the model: 
+```{r}
+m3 <- gls(Body.size.index ~ Age.1 + (Age.1 * Early.mid.gestation.PreGC) * (Age.1 * Early.mid.gestation.FA) + (Age.1 * nPostnatal.FA) + (Age.1 * Maternal.protectiveness) + (Age.1 * Maternal.rejectiveness) + (Age.1 * nSocial.play....of.time.) + (Age.1 * Sex.of.the.offspring) + (Age.1 * Year.of.birth) + (Age.1 * PostGC), data = mod_3) #Since we have been adding all the "controls" into the model, I am adding each of the controls' interactions with age in the model here 
+plot(m3)
+summary(m3) #to see all of the estimate values of each control interactions, you have to go to the m1 object in the environment and look at the coefficients. 
+```
+
+The values are a little off (example: I got -28 for age and mid-gestation food availabtilty while the authors got -24). But let's look at the R squared value: 
+
+```{r}
+library(piecewiseSEM)
+rsquared(m3) 
+```
+
+0.94, just like the authors found! This is good, but let's look at the residuals distribution (again, because the authors checked with each model):
+
+```{r}
+hist(residuals(m3))
+qqPlot(m3$residuals)
+```
+
+Looks pretty normal! 
+
+With these results, we are able to say that PreGC was a good predictor of offspring growth rate, and that growth rate was positively correlated with PreGC. 
+
+#Model 4 
+
+##PreGC-effects on offspring body size 
+
+Here, the authors run a GLS to see if prenatal stress impacts the size of the offspring at ages 16-18 months. They also control for the specific age that the body measurement was made at, as well as average PostGC during lactation. However, it also looks like they included the additional variables in the model, as they provide estimates for each in Figure 1 (d). Here's what that would look like: 
+
+Load the data: 
+
+```{r}
+f <- curl("https://raw.githubusercontent.com/MelZarate/mazarate-Berghanel2016-replication-assignment/master/model_4.csv")
+mod_4 <- read.csv(f, header = TRUE, sep = ",", stringsAsFactors = TRUE)
+head(mod_4)
+summary(mod_4)
+```
+
+Build the model: 
+```{r}
+m4 <- gls(Body.size.index ~ Early.mid.gestation.PreGC + Early.mid.gestation.FA + nPostnatal.FA + Maternal.protectiveness + Maternal.rejectiveness + nSocial.play....of.time. + Sex.of.the.offspring + Age.1 + PostGC, data = mod_4) #Age.1 is the z-transformation of the variable. 
+plot(m4)
+summary(m4)
+
+#checking the residuals...
+hist(residuals(m4))
+qqPlot(m4$residuals)
+```
+
+Estimates check out. The residuals are a little wanky but I'll roll with it, now the R squared: 
+
+```{r}
+rsquared(m4) #finding it for the model including other variables
+```
+
+For this model, my R squared is a bit off (.746 compared to the authors' .651). This is a bit strange because for model 3, my estimates were more off, but the R squared was the same. For model 4, the opposite is true. Let's see if I can get a similar looking plot, using infant ID as a grouping variable: 
+
+```{r}
+ggplot(data=mod_4,aes(y=Body.size.index,x=Early.mid.gestation.PreGC))+geom_point(data=mod_4,shape=21,aes(fill=Infant.ID))+stat_smooth(method="lm")+theme_bw()
+```
+
+This is different than the authors' figure (they used the coefficients the model produced), but still shows the positive effect it has on body size at 16-18 months of age. 
+
+Let's look into a inferential snalysis...
+
+#PCA for maternal style
+
+The authors wanted to see how different types of mother-infant inteactions during lactation belong to independent style dimensions. They did this on SPSS but I'm going to try it out here. 
+
+What's in the data: The Hinde index is the difference between the proportion of approaches and departures of the mother to asses the mother's maintenance of a 1.5 m proximity to her infant. Also included are age of nipple refusal, aggression, restraint, carrying, body contact and clasping. It is easy to be able to conceptually place each of these variables in to "protectiveness" or "rejectiveness" (this is what I have been using in the previous models), but the PCA is just a way to show that these varibles *can* be placed into those categories.  
+
+Data:
+```{r}
+f <- curl("https://raw.githubusercontent.com/MelZarate/mazarate-Berghanel2016-replication-assignment/master/PCA_data.csv")
+mat_pca <- read.csv(f, header = TRUE, sep = ",", stringsAsFactors = TRUE)
+head(mat_pca)
+```
+
+
+In the caption of the author's table, they state the p value of the Bartlett's test. This test determines if the samples are from populations with equal variances. If all variances were equal, then a PCA would be inappropriate with this data. The p value the author's got doing this on SPSS was below 0.001, but here's how we would run this on r:
+
+```{r}
+bart<-function(mat_pca){ #object will be the function of the raw data
+   R<-cor(mat_pca)
+   p<-ncol(mat_pca)
+   n<-nrow(mat_pca)
+   chi2<- -((n-1)-((2*p)+5)/6 ) * log(det(R)) #this is the formula
+   df<-(p*(p-1)/2)
+   crit<-qchisq(.95,df) #critical value using chi squared
+   p<-pchisq(chi2,df,lower.tail=F) # to get the pvalue
+   cat("Bartlett's test of sphericity: X2(",
+    df,")=",chi2,", p=", 
+   round(p,3),sep="" )   
+}
+bart(mat_pca) #p=0
+```
+
+According to this test, a PCA is indeed appropriate. I'll try it out using the psych package. The authors also state in the caption "Cut-off value=0.4," so a 40% differentiation or higher will be shown. They also state KMO=0.716. This stands for Kaiser, Meyer, Olkin (KMO) Measure of Sampling Adequacy, which is just another test to make sure the data is suited for a PCA. It measures sampling accuracy for each variable in the model and for the complete model. The value itself is a measure of the proportion of variance among variables that *might be common variance*. The psych package has a function to compute this for me: 
+```{r}
+library(psych)
+KMO(mat_pca)
+```
+
+Here, the MSA is the value I'm looking for, and it is the same as what the authors found. It is high enough that I can feel okay running a PCA on the data. 
+
+Now that we know that the variance in the data is suitable for a PCA, let's run the thing! I'm going to 
+
+```{r}
+pca<-principal(mat_pca,nfactor=2,rotate="none") #extracting 2 components
+pca
+```
+
+Looks like I got all of the same values! The PC1 and PC2 can be defined as "protectiveness" and "rejectiveness," respectively. The reason why they don't have the PC1 values for aggression rate and age of refused nipple contact is because they fell below that .4 cut-off value. The same is true for the reason why they don't show the PC2 values for all of the other variables. If you look at the variables themselves, this distinction makes complete sense, as aggression rate and age of refused nipple are the only "rejective" attributes being tested here. Therefore, the PCA does show distinction between the mothering styles. 
+
+Because I like to visualize these things, I am just going to use the base plot() function to look at this:
+
+```{r}
+plot(pca)
+```
+
+As we could expect, variable 8 and 9 are excluded from the other variables (represented by blue dots). This is how the authors decided to split the two components in to protectiveness and rejectiveness to be used throughout the analysis of the data. 
+
+#Conclusion (and critiques)
+
+From their analyses, Berghanel et al. (2016) were able to conclude that prenatal stress (preGC) has strong effects on offspring developmental phenotype. With this, they found through the first model that stress is related to reduced maternal physiological condition due to a lack of food availabilty. This most likely resulted in low energy intake by the offspring during gestation, causing reduced growth rates early in life and supporting the **developmental constraint hypothesis**. The authors also discus the idea that mothers may compensate for this with increased maternal protectives, but did not test for this. 
+
+The most difficult part about the reproduction of these authors' results was their use of the word "control." They stated that they controlled for variables and then included them in their models. This is why, in the first model, I took an extra step to regress out these control variables. After some time, however, it made more sense to me to include them, conceptually, they could have an impact on the output (example: maternal rank could impact PreGC levels because higher ranked females may get more food than others). Therefore, I support their decision to include (most of) these "control" variables in the models, but think that different terminology should have been used. The authors also left out any visualization of the second model, potentially because the plots do not show very strong correlation. I believe that the use of the log-transformed PreGC variable would have better to use in this model, and they do not explain why they transform this variable in the first model but not the second. They also leave out the reasoning behind plotting the coefficients of the models instead of the variables themselves. The regression coefficients, however, well analyzed in the results of the paper and it is safe to say that they were able to support their hypothese with an array of proper analyses.  
+
