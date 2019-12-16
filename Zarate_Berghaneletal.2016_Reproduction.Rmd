@@ -277,7 +277,7 @@ This data includes every variable that has been used thus far, along with infant
 
 Build the model: 
 ```{r}
-m3 <- gls(Body.size.index ~ Age.1 + (Age.1 * Early.mid.gestation.PreGC) * (Age.1 * Early.mid.gestation.FA) + (Age.1 * nPostnatal.FA) + (Age.1 * Maternal.protectiveness) + (Age.1 * Maternal.rejectiveness) + (Age.1 * nSocial.play....of.time.) + (Age.1 * Sex.of.the.offspring) + (Age.1 * Year.of.birth) + (Age.1 * PostGC), data = mod_3) #Since we have been adding all the "controls" into the model, I am adding each of the controls' interactions with age in the model here 
+m3 <- gls(Body.size.index ~ Age.1 + (Early.mid.gestation.PreGC * Age.1) * (Early.mid.gestation.FA * Age.1) + (nPostnatal.FA * Age.1) + (Maternal.protectiveness * Age.1) + (Maternal.rejectiveness * Age.1) + (nSocial.play....of.time. * Age.1) + (Sex.of.the.offspring * Age.1) + (Year.of.birth * Age.1) + (PostGC * Age.1), data = mod_3) #Since we have been adding all the "controls" into the model, I am adding each of the controls' interactions with age in the model here 
 plot(m3)
 summary(m3) #to see all of the estimate values of each control interactions, you have to go to the m1 object in the environment and look at the coefficients. 
 ```
@@ -297,6 +297,18 @@ qqPlot(m3$residuals)
 ```
 
 Looks pretty normal! 
+
+Now I am going to attempt to recreate the plot that the authors made. They plotted the *estimated* coefficients for age against early to mid PreGC levels. The output of the model was used to build a function in order to get these estimated values (the actual values of PreGC are between -1 and 1, they extend it to -2 and 2). The coefficient for age is 347.6 in my output (compared to their 339.7), meaning that when the PreGC is at 0, this is the age coefficient. The coefficient for the interaction between PreGC and age is 29.5 (way lower than the 57.8 that they found). Therefore, when preGC increases by one unit, the age coefficient increases by 29.5 units. I can use these values to build the simple linear function y=29.5x+347.6. 
+
+```{r}
+ggplot(data=data.frame( x=c(-2,2),y=c(200,500) ), aes(x=x,y=y)) + 
+  geom_blank() + 
+  geom_abline(slope = 29.5, intercept = 347.6) +
+  labs(y= "Estimated Coefficient for Age", x = "Early-mid Gestation PreGC")
+```
+
+Mine looks different from theirs because the slope is practically half of what they found. 
+
 
 With these results, we are able to say that PreGC was a good predictor of offspring growth rate, and that growth rate was positively correlated with PreGC. 
 
@@ -326,7 +338,7 @@ hist(residuals(m4))
 qqPlot(m4$residuals)
 ```
 
-Estimates check out. The residuals are a little wanky but I'll roll with it, now the R squared: 
+Estimates check out. The residuals are a little wacky but I'll roll with it, now the R squared: 
 
 ```{r}
 rsquared(m4) #finding it for the model including other variables
@@ -335,10 +347,10 @@ rsquared(m4) #finding it for the model including other variables
 For this model, my R squared is a bit off (.746 compared to the authors' .651). This is a bit strange because for model 3, my estimates were more off, but the R squared was the same. For model 4, the opposite is true. Let's see if I can get a similar looking plot, using infant ID as a grouping variable: 
 
 ```{r}
-ggplot(data=mod_4,aes(y=Body.size.index,x=Early.mid.gestation.PreGC))+geom_point(data=mod_4,shape=21,aes(fill=Infant.ID))+stat_smooth(method="lm")+theme_bw()
+ggplot(data=mod_4,aes(y=Body.size.index,x=Early.mid.gestation.PreGC))+geom_point(data=mod_4,aes(fill=Infant.ID), shape=21)+stat_smooth(method="lm")+theme_bw()
 ```
 
-This is different than the authors' figure (they used the coefficients the model produced), but still shows the positive effect it has on body size at 16-18 months of age. 
+This is different than the authors' figure (they used the residuals of the model produced *by each variable*), but still shows the positive effect it has on body size at 16-18 months of age. 
 
 Let's look into a inferential snalysis...
 
